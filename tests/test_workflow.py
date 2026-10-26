@@ -118,6 +118,8 @@ class WorkflowTests(unittest.TestCase):
             with self.assertRaises(ItolError) as error:
                 Client().upload(b"zip", "SECRET", "demo")
             self.assertNotIn("SECRET", str(error.exception))
+        with patch.object(Client, "request", return_value=(b"Warning: SECRET\nSUCCESS: 123", "text/plain")):
+            self.assertNotIn("SECRET", json.dumps(Client().upload(b"zip", "SECRET", "demo")))
 
     def test_id_validation(self):
         self.assertEqual(tree_id("https://itol.embl.de/tree/123"), "123")

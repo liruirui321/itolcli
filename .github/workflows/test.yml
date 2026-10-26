@@ -13,6 +13,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install .
+      - run: python -m pip install '.[trees]'
       - run: itol --help
+      - run: itol knowledge index
       - run: python -m unittest discover -s tests -v
+  pyitol-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[all]'
+      - run: itol pyitol --version
+      - run: itol pyitol template create gradient --taxonomy examples/abundance.tsv --tree examples/demo.tree --column value --label Abundance --output gradient.txt
+      - run: itol tree validate examples/demo.tree -d gradient.txt

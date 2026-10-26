@@ -9,6 +9,7 @@ import uuid
 import xml.etree.ElementTree as ET
 
 from .core import ItolError
+from . import __version__
 
 BASE_URL = "https://itol.embl.de"
 FORMATS = ("svg", "pdf", "png", "eps", "newick", "nexus", "phyloxml")
@@ -65,7 +66,7 @@ class Client:
     def request(self, endpoint, data, content_type):
         if self.last_request is not None:
             time.sleep(max(0, 3 - (time.monotonic() - self.last_request)))
-        request = urllib.request.Request(BASE_URL + endpoint, data=data, headers={"Content-Type": content_type, "User-Agent": "itol-workflow-cli/0.1.0"})
+        request = urllib.request.Request(BASE_URL + endpoint, data=data, headers={"Content-Type": content_type, "User-Agent": "itol-workflow-cli/" + __version__})
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 return response.read(), response.headers.get("Content-Type", "")
@@ -92,7 +93,9 @@ class Client:
         parts.append(f"--{boundary}--\r\n".encode())
         data, _ = self.request("/batch_uploader.cgi", b"".join(parts), "multipart/form-data; boundary=" + boundary)
         try:
-            return parse_upload(data)
+            result = parse_upload(data)
+            result["warnings"] = [warning.replace(api_key, "[REDACTED]") for warning in result["warnings"]]
+            return result
         except ItolError as error:
             raise ItolError(str(error).replace(api_key, "[REDACTED]")) from None
 

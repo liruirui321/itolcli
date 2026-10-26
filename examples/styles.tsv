@@ -1,0 +1,5 @@
+id	type	color	style	size
+Plants	clade	#009E73	normal	1.5
+Animals	clade	#D55E00	normal	1.5
+Arabidopsis	label	#009E73	italic	1
+Rice	label	#009E73	italic	1

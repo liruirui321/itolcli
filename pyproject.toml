@@ -4,14 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "itol-workflow-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Reproducible annotation, packaging and official batch access for iTOL"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []
+
+[project.optional-dependencies]
+trees = ["biopython>=1.84,<2"]
+pyitol = ["pyitol==1.0.3; python_version >= '3.10'"]
+all = ["biopython>=1.84,<2", "pyitol==1.0.3; python_version >= '3.10'"]
 
 [project.scripts]
 itol = "itol_cli.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["itol_cli*"]
+
+[tool.setuptools.package-data]
+itol_cli = ["knowledge/*.md"]

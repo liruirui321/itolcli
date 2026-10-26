@@ -53,7 +53,7 @@ def color(value):
     return value
 
 
-def annotate(path, kind, label, base_color="#0072B2"):
+def annotate(path, kind, label, base_color="#0072B2", options=None):
     """TSV/CSV with explicit columns, serialized as iTOL TAB annotation."""
     cell(label)
     color(base_color)
@@ -68,7 +68,7 @@ def annotate(path, kind, label, base_color="#0072B2"):
         raise ItolError("First column must be id; column names must be unique")
     for h in headers:
         cell(h)
-    expected = {"colorstrip": ["id", "color", "label"], "simplebar": ["id", "value"], "labels": ["id", "label"]}
+    expected = {"colorstrip": ["id", "color", "label"], "simplebar": ["id", "value"], "labels": ["id", "label"], "treecolors": ["id", "type", "color", "style", "size"], "ranges": ["id", "color", "label"]}
     if kind in expected and headers != expected[kind]:
         raise ItolError("Expected columns: " + ", ".join(expected[kind]))
     if kind == "heatmap" and len(headers) < 2:
@@ -82,9 +82,10 @@ def annotate(path, kind, label, base_color="#0072B2"):
         for value in row:
             cell(value)
         node = row[0]
-        if node.startswith("#") or node != node.strip() or node in seen:
+        identity = (node, row[1]) if kind == "treecolors" else node
+        if node.startswith("#") or node != node.strip() or identity in seen:
             raise ItolError("Duplicate/ambiguous node ID at row " + str(line))
-        seen.add(node)
+        seen.add(identity)
         if kind == "colorstrip":
             color(row[1])
             if row[2] in legend and legend[row[2]].lower() != row[1].lower():
@@ -93,15 +94,43 @@ def annotate(path, kind, label, base_color="#0072B2"):
         elif kind in ("simplebar", "heatmap"):
             for value in row[1:]:
                 number(value, missing=kind == "heatmap")
+        elif kind == "treecolors":
+            color(row[2])
+            styles = {"branch": ("normal", "dashed"), "clade": ("normal", "dashed"), "label": ("normal", "bold", "italic", "bold-italic")}
+            if row[1] not in styles or row[3] not in styles[row[1]]:
+                raise ItolError("Invalid TREE_COLORS type/style")
+            number(row[4])
+            if float(row[4]) <= 0:
+                raise ItolError("Style size factor must be positive")
+        elif kind == "ranges":
+            color(row[1])
+            row = [row[0], "range", row[1], row[2]]
         data.append("\t".join(row))
     if kind == "labels":
         lines = ["LABELS", "SEPARATOR TAB"]
+    elif kind in ("treecolors", "ranges"):
+        lines = ["TREE_COLORS", "SEPARATOR TAB"]
     else:
         lines = ["DATASET_" + kind.upper(), "SEPARATOR TAB", "DATASET_LABEL\t" + label, "COLOR\t" + base_color]
     if legend:
         lines += ["LEGEND_TITLE\t" + label, "LEGEND_SHAPES\t" + "\t".join("1" for _ in legend), "LEGEND_COLORS\t" + "\t".join(legend.values()), "LEGEND_LABELS\t" + "\t".join(legend)]
     if kind == "heatmap":
         lines += ["FIELD_LABELS\t" + "\t".join(headers[1:]), "COLOR_MIN\t#FFFFFF", "COLOR_MAX\t" + base_color, "AUTO_LEGEND\t1"]
+    if options:
+        if kind in ("labels", "treecolors", "ranges"):
+            raise ItolError("Header options apply only to dataset annotations")
+        if not isinstance(options, dict):
+            raise ItolError("Annotation options must be a JSON object")
+        reserved = {"DATA", "SEPARATOR", "DATASET_LABEL", "COLOR", "FIELD_LABELS", "LEGEND_TITLE", "LEGEND_SHAPES", "LEGEND_COLORS", "LEGEND_LABELS"}
+        for key, value in options.items():
+            if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key) or key in reserved or key.startswith("DATASET_"):
+                raise ItolError("Reserved or invalid annotation option: " + key)
+            values = value if isinstance(value, list) else [value]
+            if not values or any(isinstance(v, (dict, list, bool)) or v is None for v in values):
+                raise ItolError("Annotation option must be a scalar or nonempty scalar list")
+            fields = [cell(str(v)) for v in values]
+            lines = [line for line in lines if not line.startswith(key + "\t")]
+            lines.append(key + "\t" + "\t".join(fields))
     return ("\n".join(lines + ["DATA"] + data) + "\n").encode("utf-8")
 
 

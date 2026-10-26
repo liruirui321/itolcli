@@ -2,7 +2,7 @@
 
 A small, unofficial command-line workflow for [iTOL (Interactive Tree Of Life)](https://itol.embl.de/): generate annotations, package inputs, upload a tree, and export figures with reproducible settings.
 
-Python 3.9+; no runtime dependencies. This project is not affiliated with iTOL or EMBL. It prepares annotations and calls iTOL's renderer; it does not infer phylogenies or render trees locally.
+Python 3.9+ for the native CLI; Python 3.10+ for the optional PyiTOL backend. This project is not affiliated with iTOL or EMBL. It prepares annotations and calls iTOL's renderer; it does not infer phylogenies or render trees locally.
 
 ## Install
 
@@ -13,7 +13,33 @@ python -m pip install .
 itol --help
 ```
 
+Clone this repository first with `git clone https://github.com/liruirui321/itolcli.git` and enter `itolcli`. The distribution name `itol-workflow-cli` has not been published to PyPI; install from the checkout, not by an unqualified PyPI package name.
+
 Without installation, run `python3 -m itol_cli` from this repository in place of `itol`.
+
+Install `".[trees]"` for Biopython-backed tree parsing, or `".[all]"` on Python 3.10+ for parsing and PyiTOL advanced templates. The base package has no runtime dependencies. `itol backends` reports installed versions. Optional PyiTOL is pinned to 1.0.3; the current upstream main branch can differ.
+
+## Tree files, configuration and Agent skills
+
+```sh
+itol tree inspect input.treefile
+itol tree convert input.treefile --to nexus -o output/tree.nex
+itol tree validate input.treefile -d output/groups.txt
+itol annotate colorstrip examples/groups.tsv --label Groups \
+  --tree examples/demo.tree --config examples/strip.json -o output/groups.txt
+itol preset circular -o output/export.json
+itol knowledge formats
+itol knowledge styling
+itol pyitol template --help
+```
+
+Local parsing supports Newick (including IQ-TREE `.treefile`), Nexus and PhyloXML. The extension `TriFile` is not implemented as a distinct format. Multiple trees can be inspected/converted; `--index 0` selects the first for conversion. Conversion can lose format-specific metadata, so keep originals.
+
+`--tree` validates generated annotation IDs against one parsed tree. Direct IDs and two-tip ancestor expressions are supported; regex matching is explicitly unsupported locally. `--config` customizes dataset headers; `--options` customizes exports. These are separate JSON objects.
+
+The [portable skill](skills/itol-workflow/SKILL.md) teaches an existing Agent how to use the CLI and its knowledge. To use it with Codex, copy the `skills/itol-workflow` folder into your Codex skills directory after installing the CLI. This is an instruction package, not a new autonomous Agent server. Knowledge ships inside the Python package and is accessible offline through `itol knowledge`.
+
+The [related tools research](docs/RELATED_TOOLS.md) explains why we reuse Biopython and expose PyiTOL instead of recreating all their functionality. `itol pyitol ...` preserves upstream console output and exit codes, unlike native commands' JSON output. See [third-party provenance](THIRD_PARTY.md).
 
 ## Offline example
 
@@ -42,8 +68,10 @@ UTF-8 CSV (`.csv`, comma-separated) or TSV (all other extensions). Include a hea
 | `simplebar` | `id`, `value` | Finite numeric values |
 | `heatmap` | `id`, one or more named numeric columns | Finite numbers or `X` for missing values |
 | `labels` | `id`, `label` | Replacement display labels |
+| `treecolors` | `id`, `type`, `color`, `style`, `size` | Branch/clade/label style and positive size factor |
+| `ranges` | `id`, `color`, `label` | Colored clade/label background range |
 
-Duplicate IDs, empty cells, wrong column counts and embedded tabs/newlines are rejected. IDs must match your tree; **this version does not parse trees or verify node membership**. Branch annotations using iTOL's ancestor ID syntax may be supplied as IDs.
+Duplicate IDs (or duplicate ID/type pairs for `treecolors`), empty cells, wrong column counts and embedded tabs/newlines are rejected. IDs must match your tree: provide `--tree` to check them during generation, or run `tree validate` separately. Without either, tree membership is not checked.
 
 ## Upload
 
@@ -78,23 +106,25 @@ itol url TREE_ID
 
 Formats: SVG, PDF, PNG, EPS, Newick, Nexus and PhyloXML. Settings apply in order: preset → JSON options → `--set`. `paper` and `circular` are starter styles, not a guarantee of publication quality. Unspecified settings use iTOL defaults or saved tree settings. Set `datasets_visible=0,1,2` to select annotation tracks explicitly.
 
-Advanced keys pass through to the [documented export options](https://itol.embl.de/help.cgi#batch); the CLI does not validate every upstream option. Reserved keys `tree`, `format` and `APIkey` cannot be overridden. Export responses are checked for error pages and file format signatures before writing; this is not full binary-file integrity validation.
+Advanced keys pass through to the [documented export options](https://itol.embl.de/help.cgi#batch); the CLI does not validate every upstream option. Reserved keys `tree`, `format` and `APIkey` cannot be overridden. Export responses are checked for error pages and file format signatures before writing; this is not full binary-file integrity validation. A third `unrooted` preset is available.
 
 Network commands accept `--timeout` (seconds, default 120). Allow at least a few seconds between CLI invocations in your own loops, as requested by iTOL. The client also spaces repeated requests within one client instance by three seconds.
 
 ## Status and tests
 
-Version 0.1.0 is an initial implementation. Offline examples and 15 automated tests pass locally. Tests cover generated annotations, malformed inputs, deterministic ZIP packaging, upload response parsing, multipart fields, export request fields, error responses, credential redaction and overwrite protection. HTTP behavior is mocked in the automated suite. **A successful authenticated upload and upload-to-export round trip have not yet been verified with an iTOL account.**
+Version 0.2.0 adds tree parsing, six native annotation generators, dataset configuration, knowledge, a portable Agent skill and optional PyiTOL integration. Tests cover generated annotations, malformed inputs, tree conversion/IDs, deterministic ZIP packaging, upload/export contracts, credential redaction and overwrite protection. HTTP behavior is mocked in the automated suite. **A successful authenticated upload and upload-to-export round trip have not yet been verified with an iTOL account.** See [validation evidence](docs/VALIDATION.md) for tested versions and commands.
 
 ```sh
 python3 -m unittest discover -s tests -v
 ```
 
+Install `.[trees]` to run the parser tests; they are skipped if Biopython is absent. CI includes parser tests on all configured Python versions.
+
 See [the research and project brief](docs/PROJECT.md) for scope and the next acceptance milestone.
 
 ## 中文说明
 
-首版提供四类注释生成、离线打包、官方接口上传，以及可复用配置的图片导出。自动上传需要 iTOL 标准订阅及 API key；没有订阅时仍可离线生成注释，再到网页手动使用。当前尚未完成真实账户的上传与导出闭环验收，也不检查注释 ID 是否存在于树中。详见[调研与立项说明](docs/PROJECT.md)。
+原生能力包括六类注释、美化配置、树格式解析与转换、ID 校验、打包及官方接口上传导出。另有可选 PyiTOL 后端、离线知识库和 Agent Skill。自动上传需要 iTOL 标准订阅及 API key，真实账户上传与导出闭环尚未验收。详见[立项说明](docs/PROJECT.md)和[同类工具调研](docs/RELATED_TOOLS.md)。
 
 ## License
 
